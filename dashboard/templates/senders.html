@@ -6,6 +6,11 @@
 <div class="card">
     <div class="card-header">Senders</div>
     
+    <div class="search-container">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search by sender name or JID..." onkeyup="filterTable()">
+        <span class="search-info" id="searchInfo"></span>
+    </div>
+    
     <table>
         <thead>
             <tr>
@@ -128,6 +133,35 @@
 
 .btn-icon:hover {
     transform: scale(1.2);
+}
+
+.search-container {
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 10px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.search-info {
+    font-size: 13px;
+    color: #666;
+    white-space: nowrap;
 }
 
 .modal {
@@ -277,7 +311,6 @@
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
-
 .stats-table thead {
     background-color: #667eea;
     color: white;
@@ -307,6 +340,81 @@
 let currentSenderJid = null;
 let currentChart = null;
 let selectedDays = 7;
+let allSenders = [];
+let currentPageSenders = [];
+
+// Store current page senders data on load
+document.addEventListener('DOMContentLoaded', function() {
+    // Store current page senders from the rendered table
+    const rows = document.querySelectorAll('table tbody tr');
+    currentPageSenders = Array.from(rows).map(row => {
+        const jid = row.cells[0]?.getAttribute('title');
+        if (!jid) return null;
+        return {
+            jid: jid,
+            push_name: row.cells[1]?.textContent.trim()
+        };
+    }).filter(s => s !== null && s.push_name !== 'No senders found');
+    
+    loadAllSenders();
+});
+
+async function loadAllSenders() {
+    try {
+        const response = await fetch('/api/senders?page=1&page_size=10000');
+        if (response.ok) {
+            const data = await response.json();
+            allSenders = data.items || [];
+        }
+    } catch (error) {
+        console.error('Error loading all senders:', error);
+        allSenders = currentPageSenders;
+    }
+}
+
+function filterTable() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+    const dataSource = allSenders.length > 0 ? allSenders : currentPageSenders;
+    
+    if (!searchTerm) {
+        renderTable(dataSource);
+        document.getElementById('searchInfo').textContent = '';
+        return;
+    }
+    
+    const filteredSenders = dataSource.filter(sender => {
+        const jid = (sender.jid || '').toLowerCase();
+        const pushName = (sender.push_name || '').toLowerCase();
+        return jid.includes(searchTerm) || pushName.includes(searchTerm);
+    });
+    
+    renderTable(filteredSenders);
+    document.getElementById('searchInfo').textContent = filteredSenders.length > 0 
+        ? `Found ${filteredSenders.length} result${filteredSenders.length !== 1 ? 's' : ''}`
+        : 'No results';
+}
+
+function renderTable(senders) {
+    const tbody = document.querySelector('table tbody');
+    
+    if (senders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 30px; color: #999;">No senders found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = senders.map(sender => {
+        const pushName = sender.push_name === 'N/A' ? 'N/A' : (sender.push_name || 'N/A');
+        return `
+            <tr>
+                <td class="text-truncate" title="${sender.jid}">${sender.jid}</td>
+                <td>${pushName}</td>
+                <td class="actions">
+                    <button onclick='showStatistics("${sender.jid}")' class="btn-icon stats-btn" title="Statistics">📊</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
 
 async function showStatistics(senderJid) {
     currentSenderJid = senderJid;

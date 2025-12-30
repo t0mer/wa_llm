@@ -9,6 +9,11 @@
         <button onclick="showAddGroupModal()" class="btn btn-primary" style="float: right;">Add New Group</button>
     </div>
     
+    <div class="search-container">
+        <input type="text" id="searchInput" class="search-input" placeholder="Search by group name or JID..." onkeyup="filterTable()">
+        <span class="search-info" id="searchInfo"></span>
+    </div>
+    
     <table>
         <thead>
             <tr>
@@ -206,6 +211,35 @@
     background-color: #5568d3;
 }
 
+.search-container {
+    padding: 15px 20px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.search-input {
+    flex: 1;
+    padding: 10px 15px;
+    border: 2px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.search-info {
+    font-size: 13px;
+    color: #666;
+    white-space: nowrap;
+}
+
 .modal {
     display: none;
     position: fixed;
@@ -352,6 +386,109 @@ let editingRow = null;
 let originalValues = {};
 let currentGroupJid = null;
 let currentChart = null;
+let allGroups = [];
+let currentPageGroups = [];
+
+// Store current page groups data on load
+document.addEventListener('DOMContentLoaded', function() {
+    // Store current page groups from the rendered table
+    const rows = document.querySelectorAll('table tbody tr[data-jid]');
+    currentPageGroups = Array.from(rows).map(row => {
+        const jid = row.dataset.jid;
+        return {
+            group_jid: jid,
+            group_name: row.querySelector('[data-field="group_name"]')?.textContent.trim(),
+            owner_jid: row.querySelector('[data-field="owner_jid"]')?.textContent.trim(),
+            managed: row.querySelector('[data-field="managed"] .badge-success') !== null,
+            notify_on_spam: row.querySelector('[data-field="notify_on_spam"] .badge-success') !== null,
+            created_at: row.cells[5]?.textContent.trim()
+        };
+    });
+    
+    loadAllGroups();
+});
+
+async function loadAllGroups() {
+    try {
+        const response = await fetch('/api/groups?page=1&page_size=10000');
+        if (response.ok) {
+            const data = await response.json();
+            allGroups = data.items || [];
+        }
+    } catch (error) {
+        console.error('Error loading all groups:', error);
+        allGroups = currentPageGroups;
+    }
+}
+
+function filterTable() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase().trim();
+    const dataSource = allGroups.length > 0 ? allGroups : currentPageGroups;
+    
+    if (!searchTerm) {
+        renderTable(dataSource);
+        document.getElementById('searchInfo').textContent = '';
+        return;
+    }
+    
+    const filteredGroups = dataSource.filter(group => {
+        const groupJid = (group.group_jid || '').toLowerCase();
+        const groupName = (group.group_name || '').toLowerCase();
+        return groupJid.includes(searchTerm) || groupName.includes(searchTerm);
+    });
+    
+    renderTable(filteredGroups);
+    document.getElementById('searchInfo').textContent = filteredGroups.length > 0 
+        ? `Found ${filteredGroups.length} result${filteredGroups.length !== 1 ? 's' : ''}`
+        : 'No results';
+}
+
+function renderTable(groups) {
+    const tbody = document.querySelector('table tbody');
+    
+    if (groups.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 30px; color: #999;">No groups found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = groups.map(group => {
+        let createdAt = group.created_at || 'N/A';
+        if (createdAt !== 'N/A' && createdAt.includes('T')) {
+            createdAt = new Date(createdAt).toLocaleString('en-CA', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            }).replace(',', '');
+        }
+        
+        const groupName = group.group_name === 'N/A' ? 'N/A' : (group.group_name || 'N/A');
+        const ownerJid = group.owner_jid === 'N/A' ? 'N/A' : (group.owner_jid || 'N/A');
+        
+        return `
+            <tr id="row-${group.group_jid}" data-jid="${group.group_jid}">
+                <td class="text-truncate" title="${group.group_jid}">${group.group_jid}</td>
+                <td class="editable" data-field="group_name">${groupName}</td>
+                <td class="editable text-truncate" data-field="owner_jid" title="${ownerJid}">${ownerJid}</td>
+                <td class="editable" data-field="managed">
+                    <span class="badge ${group.managed ? 'badge-success' : 'badge-warning'}">${group.managed ? 'Yes' : 'No'}</span>
+                </td>
+                <td class="editable" data-field="notify_on_spam">
+                    <span class="badge ${group.notify_on_spam ? 'badge-success' : 'badge-warning'}">${group.notify_on_spam ? 'Yes' : 'No'}</span>
+                </td>
+                <td>${createdAt}</td>
+                <td class="actions">
+                    <button onclick='showStatistics("${group.group_jid}")' class="btn-icon stats-btn" title="Statistics">📊</button>
+                    <button onclick='editRow("${group.group_jid}")' class="btn-icon edit-btn" title="Edit">✏️</button>
+                    <button onclick='deleteRow("${group.group_jid}")' class="btn-icon delete-btn" title="Delete">🗑️</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
 
 function showAddGroupModal() {
     document.getElementById('addGroupModal').style.display = 'block';
