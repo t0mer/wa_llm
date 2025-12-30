@@ -30,7 +30,11 @@
                     <td class="text-truncate" title="{{ message.text }}">{{ message.text or 'N/A' }}</td>
                     <td class="text-truncate" title="{{ message.media_url }}">
                         {% if message.media_url %}
-                            <a href="{{ message.media_url }}" target="_blank">View</a>
+                            {% if message.media_url.startswith('http') %}
+                                <a href="{{ message.media_url }}" target="_blank">View</a>
+                            {% else %}
+                                <a href="{{ whatsapp_host }}/{{ message.media_url }}" target="_blank">View</a>
+                            {% endif %}
                         {% else %}
                             N/A
                         {% endif %}

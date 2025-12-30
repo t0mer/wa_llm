@@ -24,6 +24,7 @@ from models import Group, Sender, Reaction, Message, KBTopic, KBTopicMessage
 DB_URI = os.getenv("DB_URI")
 BASIC_AUTH_USER = os.getenv("WHATSAPP_BASIC_AUTH_USER", "admin")
 BASIC_AUTH_PASSWORD = os.getenv("WHATSAPP_BASIC_AUTH_PASSWORD", "password")
+WHATSAPP_HOST = os.getenv("WHATSAPP_HOST", "http://localhost:3000")
 
 if not DB_URI:
     raise ValueError("DB_URI environment variable is required")
@@ -38,6 +39,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="WhatsApp LLM Dashboard", lifespan=lifespan)
 templates = Jinja2Templates(directory="templates")
+
+# Add global context for templates
+@app.middleware("http")
+async def add_whatsapp_host_to_context(request: Request, call_next):
+    request.state.whatsapp_host = WHATSAPP_HOST
+    response = await call_next(request)
+    return response
+
+templates.env.globals["whatsapp_host"] = WHATSAPP_HOST
+
 security = HTTPBasic()
 
 
