@@ -30,11 +30,8 @@
                     <td class="text-truncate" title="{{ message.text }}">{{ message.text or 'N/A' }}</td>
                     <td class="text-truncate" title="{{ message.media_url }}">
                         {% if message.media_url %}
-                            {% if message.media_url.startswith('http') %}
-                                <a href="{{ message.media_url }}" target="_blank">View</a>
-                            {% else %}
-                                <a href="{{ whatsapp_host }}/{{ message.media_url }}" target="_blank">View</a>
-                            {% endif %}
+                            {% set media_url = message.media_url if message.media_url.startswith('http') else whatsapp_host ~ '/' ~ message.media_url %}
+                            <button onclick="showMediaModal('{{ media_url }}', '{{ message.media_url }}')" class="btn-icon media-btn" title="View Media">🖼️</button>
                         {% else %}
                             N/A
                         {% endif %}
@@ -87,4 +84,228 @@
         </div>
     </div>
 </div>
+
+<!-- Media Modal -->
+<div id="mediaModal" class="modal">
+    <div class="modal-content media-modal-content">
+        <span class="close" onclick="closeMediaModal()">&times;</span>
+        <h2 id="mediaTitle">Media Preview</h2>
+        <div id="mediaContainer" class="media-container"></div>
+        <div class="media-actions">
+            <a id="downloadLink" href="#" download target="_blank" class="btn btn-primary">Download</a>
+        </div>
+    </div>
+</div>
+
+<style>
+.btn-icon.media-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    padding: 4px 8px;
+    transition: transform 0.2s;
+}
+
+.btn-icon.media-btn:hover {
+    transform: scale(1.3);
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.8);
+}
+
+.media-modal-content {
+    background-color: #fefefe;
+    margin: 2% auto;
+    padding: 30px;
+    border: 1px solid #888;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 1200px;
+    max-height: 90vh;
+    overflow: auto;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 20px;
+}
+
+.close:hover,
+.close:focus {
+    color: #000;
+}
+
+.media-container {
+    margin: 20px 0;
+    text-align: center;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f5f5f5;
+    border-radius: 8px;
+    padding: 20px;
+}
+
+.media-container img {
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    border-radius: 4px;
+}
+
+.media-container video {
+    max-width: 100%;
+    max-height: 70vh;
+    border-radius: 4px;
+}
+
+.media-container audio {
+    width: 100%;
+    max-width: 500px;
+}
+
+.media-container iframe {
+    width: 100%;
+    height: 70vh;
+    border: none;
+    border-radius: 4px;
+}
+
+.media-actions {
+    margin-top: 20px;
+    text-align: center;
+}
+
+.btn-primary {
+    background-color: #667eea;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.btn-primary:hover {
+    background-color: #5568d3;
+}
+</style>
+
+<script>
+function getMediaType(url) {
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+    const videoExtensions = ['.mp4', '.webm', '.ogg', '.mov', '.avi'];
+    const audioExtensions = ['.mp3', '.wav', '.ogg', '.m4a', '.aac'];
+    const docExtensions = ['.pdf'];
+    
+    const lowerUrl = url.toLowerCase();
+    
+    if (imageExtensions.some(ext => lowerUrl.includes(ext))) return 'image';
+    if (videoExtensions.some(ext => lowerUrl.includes(ext))) return 'video';
+    if (audioExtensions.some(ext => lowerUrl.includes(ext))) return 'audio';
+    if (docExtensions.some(ext => lowerUrl.includes(ext))) return 'pdf';
+    
+    // Check if URL contains media type hints
+    if (lowerUrl.includes('/image/') || lowerUrl.includes('image')) return 'image';
+    if (lowerUrl.includes('/video/')) return 'video';
+    if (lowerUrl.includes('/audio/')) return 'audio';
+    if (lowerUrl.includes('/document/')) return 'document';
+    
+    return 'image'; // Default to image
+}
+
+function showMediaModal(mediaUrl, originalPath) {
+    const modal = document.getElementById('mediaModal');
+    const container = document.getElementById('mediaContainer');
+    const downloadLink = document.getElementById('downloadLink');
+    const title = document.getElementById('mediaTitle');
+    
+    // Clear previous content
+    container.innerHTML = '';
+    
+    // Set download link
+    downloadLink.href = mediaUrl;
+    
+    // Determine media type and create appropriate element
+    const mediaType = getMediaType(originalPath || mediaUrl);
+    
+    if (mediaType === 'image') {
+        title.textContent = 'Image Preview';
+        const img = document.createElement('img');
+        img.src = mediaUrl;
+        img.alt = 'Media content';
+        img.onerror = function() {
+            container.innerHTML = '<p style="color: #999;">Failed to load image. <a href="' + mediaUrl + '" target="_blank">Open in new tab</a></p>';
+        };
+        container.appendChild(img);
+    } else if (mediaType === 'video') {
+        title.textContent = 'Video Preview';
+        const video = document.createElement('video');
+        video.src = mediaUrl;
+        video.controls = true;
+        video.onerror = function() {
+            container.innerHTML = '<p style="color: #999;">Failed to load video. <a href="' + mediaUrl + '" target="_blank">Open in new tab</a></p>';
+        };
+        container.appendChild(video);
+    } else if (mediaType === 'audio') {
+        title.textContent = 'Audio Preview';
+        const audio = document.createElement('audio');
+        audio.src = mediaUrl;
+        audio.controls = true;
+        audio.onerror = function() {
+            container.innerHTML = '<p style="color: #999;">Failed to load audio. <a href="' + mediaUrl + '" target="_blank">Open in new tab</a></p>';
+        };
+        container.appendChild(audio);
+    } else if (mediaType === 'pdf') {
+        title.textContent = 'Document Preview';
+        const iframe = document.createElement('iframe');
+        iframe.src = mediaUrl;
+        iframe.onerror = function() {
+            container.innerHTML = '<p style="color: #999;">Failed to load document. <a href="' + mediaUrl + '" target="_blank">Open in new tab</a></p>';
+        };
+        container.appendChild(iframe);
+    } else {
+        title.textContent = 'Media Preview';
+        container.innerHTML = '<p style="color: #666;">Preview not available for this file type. <a href="' + mediaUrl + '" target="_blank">Open in new tab</a></p>';
+    }
+    
+    modal.style.display = 'block';
+}
+
+function closeMediaModal() {
+    document.getElementById('mediaModal').style.display = 'none';
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('mediaModal');
+    if (event.target == modal) {
+        closeMediaModal();
+    }
+}
+
+// Close modal with Escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closeMediaModal();
+    }
+});
+</script>
 {% endblock %}
+
