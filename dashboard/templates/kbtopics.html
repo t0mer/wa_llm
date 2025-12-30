@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}KB Topics - WhatsApp LLM Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">Knowledge Base Topics</div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Group JID</th>
+                <th>Start Time</th>
+                <th>Speakers</th>
+                <th>Subject</th>
+                <th>Summary</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if kbtopics %}
+                {% for topic in kbtopics %}
+                <tr>
+                    <td class="text-truncate" title="{{ topic.id }}">{{ topic.id }}</td>
+                    <td class="text-truncate" title="{{ topic.group_jid }}">{{ topic.group_jid or 'N/A' }}</td>
+                    <td>{{ topic.start_time.strftime('%Y-%m-%d %H:%M:%S') if topic.start_time else 'N/A' }}</td>
+                    <td class="text-truncate" title="{{ topic.speakers }}">{{ topic.speakers }}</td>
+                    <td class="text-truncate" title="{{ topic.subject }}">{{ topic.subject }}</td>
+                    <td class="text-truncate" title="{{ topic.summary }}">{{ topic.summary }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 30px; color: #999;">No KB topics found</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ ((page - 1) * page_size + 1) if total > 0 else 0 }} to {{ (page * page_size) if (page * page_size < total) else total }} of {{ total }} entries
+        </div>
+        <div class="pagination-controls">
+            <select class="page-size-select" onchange="window.location.href='?page=1&page_size=' + this.value">
+                <option value="10" {% if page_size == 10 %}selected{% endif %}>10 per page</option>
+                <option value="20" {% if page_size == 20 %}selected{% endif %}>20 per page</option>
+                <option value="50" {% if page_size == 50 %}selected{% endif %}>50 per page</option>
+                <option value="100" {% if page_size == 100 %}selected{% endif %}>100 per page</option>
+            </select>
+            
+            <div class="page-numbers">
+                {% if page > 1 %}
+                    <a href="?page={{ page - 1 }}&page_size={{ page_size }}" class="btn">Previous</a>
+                {% else %}
+                    <button class="btn" disabled>Previous</button>
+                {% endif %}
+
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                        <span class="page-number active">{{ p }}</span>
+                    {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                        <a href="?page={{ p }}&page_size={{ page_size }}" class="page-number">{{ p }}</a>
+                    {% elif p == page - 3 or p == page + 3 %}
+                        <span class="page-number">...</span>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page < total_pages %}
+                    <a href="?page={{ page + 1 }}&page_size={{ page_size }}" class="btn">Next</a>
+                {% else %}
+                    <button class="btn" disabled>Next</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Reactions - WhatsApp LLM Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">Reactions</div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Message ID</th>
+                <th>Sender JID</th>
+                <th>Emoji</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if reactions %}
+                {% for reaction in reactions %}
+                <tr>
+                    <td>{{ reaction.id }}</td>
+                    <td class="text-truncate" title="{{ reaction.message_id }}">{{ reaction.message_id }}</td>
+                    <td class="text-truncate" title="{{ reaction.sender_jid }}">{{ reaction.sender_jid }}</td>
+                    <td style="font-size: 20px;">{{ reaction.emoji }}</td>
+                    <td>{{ reaction.timestamp.strftime('%Y-%m-%d %H:%M:%S') if reaction.timestamp else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 30px; color: #999;">No reactions found</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ ((page - 1) * page_size + 1) if total > 0 else 0 }} to {{ (page * page_size) if (page * page_size < total) else total }} of {{ total }} entries
+        </div>
+        <div class="pagination-controls">
+            <select class="page-size-select" onchange="window.location.href='?page=1&page_size=' + this.value">
+                <option value="10" {% if page_size == 10 %}selected{% endif %}>10 per page</option>
+                <option value="20" {% if page_size == 20 %}selected{% endif %}>20 per page</option>
+                <option value="50" {% if page_size == 50 %}selected{% endif %}>50 per page</option>
+                <option value="100" {% if page_size == 100 %}selected{% endif %}>100 per page</option>
+            </select>
+            
+            <div class="page-numbers">
+                {% if page > 1 %}
+                    <a href="?page={{ page - 1 }}&page_size={{ page_size }}" class="btn">Previous</a>
+                {% else %}
+                    <button class="btn" disabled>Previous</button>
+                {% endif %}
+
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                        <span class="page-number active">{{ p }}</span>
+                    {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                        <a href="?page={{ p }}&page_size={{ page_size }}" class="page-number">{{ p }}</a>
+                    {% elif p == page - 3 or p == page + 3 %}
+                        <span class="page-number">...</span>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page < total_pages %}
+                    <a href="?page={{ page + 1 }}&page_size={{ page_size }}" class="btn">Next</a>
+                {% else %}
+                    <button class="btn" disabled>Next</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

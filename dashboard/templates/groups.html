@@ -1,0 +1,751 @@
+{% extends "base.html" %}
+
+{% block title %}Groups - WhatsApp LLM Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        Groups
+        <button onclick="showAddGroupModal()" class="btn btn-primary" style="float: right;">Add New Group</button>
+    </div>
+    
+    <table>
+        <thead>
+            <tr>
+                <th>Group JID</th>
+                <th>Group Name</th>
+                <th>Owner JID</th>
+                <th>Managed</th>
+                <th>Notify on Spam</th>
+                <th>Created At</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if groups %}
+                {% for group in groups %}
+                <tr id="row-{{ group.group_jid }}" data-jid="{{ group.group_jid }}">
+                    <td class="text-truncate" title="{{ group.group_jid }}">{{ group.group_jid }}</td>
+                    <td class="editable" data-field="group_name">{{ group.group_name or 'N/A' }}</td>
+                    <td class="editable text-truncate" data-field="owner_jid" title="{{ group.owner_jid }}">{{ group.owner_jid or 'N/A' }}</td>
+                    <td class="editable" data-field="managed">
+                        {% if group.managed %}
+                            <span class="badge badge-success">Yes</span>
+                        {% else %}
+                            <span class="badge badge-warning">No</span>
+                        {% endif %}
+                    </td>
+                    <td class="editable" data-field="notify_on_spam">
+                        {% if group.notify_on_spam %}
+                            <span class="badge badge-success">Yes</span>
+                        {% else %}
+                            <span class="badge badge-warning">No</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ group.created_at.strftime('%Y-%m-%d %H:%M:%S') if group.created_at else 'N/A' }}</td>
+                    <td class="actions">
+                        <button onclick='showStatistics("{{ group.group_jid }}")' class="btn-icon stats-btn" title="Statistics">📊</button>
+                        <button onclick='editRow("{{ group.group_jid }}")' class="btn-icon edit-btn" title="Edit">✏️</button>
+                        <button onclick='deleteRow("{{ group.group_jid }}")' class="btn-icon delete-btn" title="Delete">🗑️</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; padding: 30px; color: #999;">No groups found</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ ((page - 1) * page_size + 1) if total > 0 else 0 }} to {{ (page * page_size) if (page * page_size < total) else total }} of {{ total }} entries
+        </div>
+        <div class="pagination-controls">
+            <select class="page-size-select" onchange="window.location.href='?page=1&page_size=' + this.value">
+                <option value="10" {% if page_size == 10 %}selected{% endif %}>10 per page</option>
+                <option value="20" {% if page_size == 20 %}selected{% endif %}>20 per page</option>
+                <option value="50" {% if page_size == 50 %}selected{% endif %}>50 per page</option>
+                <option value="100" {% if page_size == 100 %}selected{% endif %}>100 per page</option>
+            </select>
+            
+            <div class="page-numbers">
+                {% if page > 1 %}
+                    <a href="?page={{ page - 1 }}&page_size={{ page_size }}" class="btn">Previous</a>
+                {% else %}
+                    <button class="btn" disabled>Previous</button>
+                {% endif %}
+
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p == page %}
+                        <span class="page-number active">{{ p }}</span>
+                    {% elif p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                        <a href="?page={{ p }}&page_size={{ page_size }}" class="page-number">{{ p }}</a>
+                    {% elif p == page - 3 or p == page + 3 %}
+                        <span class="page-number">...</span>
+                    {% endif %}
+                {% endfor %}
+
+                {% if page < total_pages %}
+                    <a href="?page={{ page + 1 }}&page_size={{ page_size }}" class="btn">Next</a>
+                {% else %}
+                    <button class="btn" disabled>Next</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Modal -->
+<div id="statsModal" class="modal">
+    <div class="modal-content stats-modal-content">
+        <span class="close" onclick="closeStatsModal()">&times;</span>
+        <h2>Message Statistics</h2>
+        <p id="statsGroupName" style="color: #666; margin-top: -10px;"></p>
+        
+        <div class="time-frame-section">
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Time Frame</label>
+            <div class="time-frame-buttons">
+                <button class="time-btn active" data-days="1" onclick="selectTimeFrame(1)">24 Hours</button>
+                <button class="time-btn" data-days="7" onclick="selectTimeFrame(7)">7 Days</button>
+                <button class="time-btn" data-days="30" onclick="selectTimeFrame(30)">30 Days</button>
+                <button class="time-btn" data-days="90" onclick="selectTimeFrame(90)">90 Days</button>
+            </div>
+        </div>
+        
+        <div class="total-messages-box">
+            <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Total Messages in Selected Time Frame</div>
+            <div id="totalMessages" style="font-size: 32px; font-weight: bold; color: #4169E1;">0</div>
+        </div>
+        
+        <h3 style="margin-top: 30px; margin-bottom: 15px;">Messages Per Day</h3>
+        <div class="chart-container">
+            <canvas id="messagesChart"></canvas>
+        </div>
+        
+        <h3 style="margin-top: 30px; margin-bottom: 15px;">Detailed Breakdown - Top Senders</h3>
+        <table class="stats-table detailed-table">
+            <thead>
+                <tr>
+                    <th style="text-align: left;">SENDER</th>
+                    <th style="text-align: center;">MESSAGES</th>
+                    <th style="text-align: center;">PERCENTAGE</th>
+                </tr>
+            </thead>
+            <tbody id="topSendersTable">
+                <tr>
+                    <td colspan="3" style="text-align: center;">Loading...</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Group Modal -->
+<div id="addGroupModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeAddGroupModal()">&times;</span>
+        <h2>Add New Group</h2>
+        <form id="addGroupForm" onsubmit="addGroup(event)">
+            <div class="form-group">
+                <label>Group JID *</label>
+                <input type="text" id="new_group_jid" required>
+            </div>
+            <div class="form-group">
+                <label>Group Name</label>
+                <input type="text" id="new_group_name">
+            </div>
+            <div class="form-group">
+                <label>Group Topic</label>
+                <input type="text" id="new_group_topic">
+            </div>
+            <div class="form-group">
+                <label>Owner JID</label>
+                <input type="text" id="new_owner_jid">
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="new_managed"> Managed
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="new_notify_on_spam"> Notify on Spam
+                </label>
+            </div>
+            <button type="submit" class="btn btn-primary">Add Group</button>
+        </form>
+    </div>
+</div>
+
+<style>
+.btn-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px 8px;
+    transition: transform 0.2s;
+}
+
+.btn-icon:hover {
+    transform: scale(1.2);
+}
+
+.btn-primary {
+    background-color: #667eea;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.btn-primary:hover {
+    background-color: #5568d3;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 5% auto;
+    padding: 30px;
+    border: 1px solid #888;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 500px;
+}
+
+.stats-modal-content {
+    max-width: 900px;
+    width: 90%;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+    color: #000;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.form-group input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.form-group input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+tr.editing .editable {
+    background-color: #fff3cd;
+}
+
+.actions {
+    white-space: nowrap;
+}
+
+.time-frame-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.time-frame-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+.time-btn {
+    flex: 1;
+    min-width: 100px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #4a5568;
+    background: white;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    position: relative;
+    overflow: hidden;
+}
+
+.time-btn:before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+}
+
+.time-btn:hover:before {
+    left: 100%;
+}
+
+.time-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+    border-color: #667eea;
+    color: #667eea;
+}
+
+.time-btn.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: #667eea;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    transform: translateY(-1px);
+}
+
+.time-btn.active:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.time-btn:active {
+    transform: translateY(0);
+}
+</style>
+
+<script>
+let editingRow = null;
+let originalValues = {};
+let currentGroupJid = null;
+let currentChart = null;
+
+function showAddGroupModal() {
+    document.getElementById('addGroupModal').style.display = 'block';
+}
+
+function closeAddGroupModal() {
+    document.getElementById('addGroupModal').style.display = 'none';
+    document.getElementById('addGroupForm').reset();
+}
+
+async function addGroup(event) {
+    event.preventDefault();
+    
+    const data = {
+        group_jid: document.getElementById('new_group_jid').value,
+        group_name: document.getElementById('new_group_name').value || null,
+        group_topic: document.getElementById('new_group_topic').value || null,
+        owner_jid: document.getElementById('new_owner_jid').value || null,
+        managed: document.getElementById('new_managed').checked,
+        notify_on_spam: document.getElementById('new_notify_on_spam').checked
+    };
+    
+    try {
+        const response = await fetch('/api/groups', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: 'Success!',
+                text: 'Group added successfully',
+                confirmButtonColor: '#667eea'
+            });
+            closeAddGroupModal();
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error.detail,
+                confirmButtonColor: '#667eea'
+            });
+        }
+    } catch (error) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error adding group: ' + error.message,
+            confirmButtonColor: '#667eea'
+        });
+    }
+}
+
+function editRow(groupJid) {
+    const row = document.getElementById('row-' + groupJid);
+    
+    if (editingRow && editingRow !== row) {
+        cancelEdit();
+    }
+    
+    editingRow = row;
+    row.classList.add('editing');
+    
+    // Store original values
+    originalValues = {};
+    
+    const editables = row.querySelectorAll('.editable');
+    editables.forEach(cell => {
+        const field = cell.dataset.field;
+        originalValues[field] = cell.textContent.trim();
+        
+        if (field === 'managed' || field === 'notify_on_spam') {
+            const isYes = cell.querySelector('.badge-success') !== null;
+            cell.innerHTML = `
+                <select class="edit-select">
+                    <option value="true" ${isYes ? 'selected' : ''}>Yes</option>
+                    <option value="false" ${!isYes ? 'selected' : ''}>No</option>
+                </select>
+            `;
+        } else {
+            const value = originalValues[field] === 'N/A' ? '' : originalValues[field];
+            cell.innerHTML = `<input type="text" class="edit-input" value="${value}">`;
+        }
+    });
+    
+    // Update action buttons
+    const actionsCell = row.querySelector('.actions');
+    actionsCell.innerHTML = `
+        <button onclick="saveRow('${groupJid}')" class="btn-icon" title="Save">💾</button>
+        <button onclick="cancelEdit()" class="btn-icon" title="Cancel">❌</button>
+    `;
+}
+
+async function saveRow(groupJid) {
+    const row = document.getElementById('row-' + groupJid);
+    const data = {};
+    
+    const editables = row.querySelectorAll('.editable');
+    editables.forEach(cell => {
+        const field = cell.dataset.field;
+        
+        if (field === 'managed' || field === 'notify_on_spam') {
+            const select = cell.querySelector('select');
+            data[field] = select.value === 'true';
+        } else {
+            const input = cell.querySelector('input');
+            data[field] = input.value || null;
+        }
+    });
+    
+    try {
+        const response = await fetch(`/api/groups/${encodeURIComponent(groupJid)}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: 'Updated!',
+                text: 'Group updated successfully',
+                confirmButtonColor: '#667eea',
+                timer: 1500,
+                showConfirmButton: false
+            });
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error.detail,
+                confirmButtonColor: '#667eea'
+            });
+        }
+    } catch (error) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error updating group: ' + error.message,
+            confirmButtonColor: '#667eea'
+        });
+    }
+}
+
+function cancelEdit() {
+    if (!editingRow) return;
+    
+    const editables = editingRow.querySelectorAll('.editable');
+    editables.forEach(cell => {
+        const field = cell.dataset.field;
+        const value = originalValues[field];
+        
+        if (field === 'managed' || field === 'notify_on_spam') {
+            const isYes = value.includes('Yes');
+            const badgeClass = isYes ? 'badge-success' : 'badge-warning';
+            cell.innerHTML = `<span class="badge ${badgeClass}">${value}</span>`;
+        } else {
+            cell.textContent = value;
+        }
+    });
+    
+    const groupJid = editingRow.dataset.jid;
+    const actionsCell = editingRow.querySelector('.actions');
+    actionsCell.innerHTML = `
+        <button onclick='showStatistics("${groupJid}")' class="btn-icon stats-btn" title="Statistics">📊</button>
+        <button onclick='editRow("${groupJid}")' class="btn-icon edit-btn" title="Edit">✏️</button>
+        <button onclick='deleteRow("${groupJid}")' class="btn-icon delete-btn" title="Delete">🗑️</button>
+    `;
+    
+    editingRow.classList.remove('editing');
+    editingRow = null;
+    originalValues = {};
+}
+
+async function deleteRow(groupJid) {
+    const result = await Swal.fire({
+        icon: 'warning',
+        title: 'Are you sure?',
+        text: 'Do you want to delete this group? This action cannot be undone!',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#667eea',
+        confirmButtonText: 'Yes, delete it!',
+        cancelButtonText: 'Cancel'
+    });
+    
+    if (!result.isConfirmed) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/groups/${encodeURIComponent(groupJid)}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            await Swal.fire({
+                icon: 'success',
+                title: 'Deleted!',
+                text: 'Group deleted successfully',
+                confirmButtonColor: '#667eea',
+                timer: 1500,
+                showConfirmButton: false
+            });
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            await Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: error.detail,
+                confirmButtonColor: '#667eea'
+            });
+        }
+    } catch (error) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Error deleting group: ' + error.message,
+            confirmButtonColor: '#667eea'
+        });
+    }
+}
+
+// Close modal when clicking outside of it
+window.onclick = function(event) {
+    const modal = document.getElementById('addGroupModal');
+    const statsModal = document.getElementById('statsModal');
+    if (event.target === modal) {
+        closeAddGroupModal();
+    }
+    if (event.target === statsModal) {
+        closeStatsModal();
+    }
+}
+
+// Statistics functions
+let selectedDays = 1;
+
+async function showStatistics(groupJid) {
+    currentGroupJid = groupJid;
+    selectedDays = 1;
+    document.getElementById('statsModal').style.display = 'block';
+    
+    // Reset buttons
+    document.querySelectorAll('.time-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector('.time-btn[data-days="1"]').classList.add('active');
+    
+    await fetchStatistics(groupJid, selectedDays);
+}
+
+function selectTimeFrame(days) {
+    selectedDays = days;
+    
+    // Update button states
+    document.querySelectorAll('.time-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`.time-btn[data-days="${days}"]`).classList.add('active');
+    
+    if (currentGroupJid) {
+        fetchStatistics(currentGroupJid, days);
+    }
+}
+
+function closeStatsModal() {
+    document.getElementById('statsModal').style.display = 'none';
+    if (currentChart) {
+        currentChart.destroy();
+        currentChart = null;
+    }
+    currentGroupJid = null;
+}
+
+async function fetchStatistics(groupJid, days) {
+    try {
+        const response = await fetch(`/api/groups/${encodeURIComponent(groupJid)}/statistics?days=${days}`);
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Update modal title
+            document.getElementById('statsGroupName').textContent = 
+                `Statistics: ${data.group_name || groupJid}`;
+            
+            // Calculate and display total messages
+            const totalMessages = data.messages_per_day.reduce((sum, item) => sum + item.count, 0);
+            document.getElementById('totalMessages').textContent = totalMessages;
+            
+            // Update chart
+            updateChart(data.messages_per_day);
+            
+            // Update top senders table
+            updateTopSendersTable(data.top_senders);
+        }
+    } catch (error) {
+        await Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Failed to load statistics: ' + error.message,
+            confirmButtonColor: '#667eea'
+        });
+    }
+}
+
+function updateChart(messagesPerDay) {
+    const ctx = document.getElementById('messagesChart').getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (currentChart) {
+        currentChart.destroy();
+    }
+    
+    // Prepare data
+    const labels = messagesPerDay.map(item => item.date);
+    const data = messagesPerDay.map(item => item.count);
+    
+    // Create new chart
+    currentChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Messages',
+                data: data,
+                backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                borderColor: 'rgba(102, 126, 234, 1)',
+                borderWidth: 1,
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        stepSize: 1,
+                        font: {
+                            size: 12
+                        }
+                    },
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            size: 12
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateTopSendersTable(topSenders) {
+    const tbody = document.getElementById('topSendersTable');
+    
+    if (topSenders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: #999;">No messages found</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = topSenders.map((sender, index) => `
+        <tr>
+            <td style="text-align: center; font-weight: bold;">${index + 1}</td>
+            <td>${sender.push_name}</td>
+            <td class="text-truncate" title="${sender.sender_jid}">${sender.sender_jid}</td>
+            <td style="text-align: center; font-weight: bold;">${sender.message_count}</td>
+        </tr>
+    `).join('');
+}
+</script>
+{% endblock %}
