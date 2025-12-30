@@ -36,8 +36,24 @@ services:
       - APP_BASIC_AUTH=admin:admin
       - WHATSAPP_CHAT_STORAGE=false
 
+  pgadmin:
+    image: dpage/pgadmin4 # The official pgAdmin Docker image
+    container_name: pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=tomer.klein@gmail.com
+      - PGADMIN_DEFAULT_PASSWORD=T0mer!2405-77
+    ports:
+      - "5431:80" # Access pgAdmin in your browser at http://localhost:8080
+    volumes:
+      # Optional: persist pgAdmin configuration/sessions
+      - pgadmin_data:/var/lib/pgadmin
+
+
+
 volumes:
   wa_llm_whatsapp:
     name: wa_llm_whatsapp
   wa_llm_postgres:
     name: wa_llm_postgres
+  pgadmin_data:
+    name: pgadmin_data

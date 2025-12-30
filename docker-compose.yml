@@ -4,6 +4,11 @@ services:
       file: docker-compose.base.yml
       service: postgres
 
+  pgadmin:
+    extends:
+      file: docker-compose.base.yml
+      service: pgadmin
+
   whatsapp:
     extends:
       file: docker-compose.base.yml
@@ -28,8 +33,23 @@ services:
       - DB_URI=postgresql+asyncpg://user:password@postgres:5432/postgres
       - WHATSAPP_HOST=http://whatsapp:3000
 
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "8001:8080"
+    depends_on:
+      - postgres
+    environment:
+      - DB_URI=postgresql+asyncpg://user:password@postgres:5432/postgres
+      - WHATSAPP_BASIC_AUTH_USER=admin
+      - WHATSAPP_BASIC_AUTH_PASSWORD=admin
+
 volumes:
   wa_llm_whatsapp:
     name: wa_llm_whatsapp
   wa_llm_postgres:
     name: wa_llm_postgres
+  pgadmin_data:
+    name: pgadmin_data
