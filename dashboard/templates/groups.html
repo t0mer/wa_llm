@@ -49,6 +49,7 @@
                     </td>
                     <td>{{ group.created_at.strftime('%Y-%m-%d %H:%M:%S') if group.created_at else 'N/A' }}</td>
                     <td class="actions">
+                        <button onclick='showSummary("{{ group.group_jid }}", "{{ group.group_name }}")' class="btn-icon summary-btn" title="View Summary">📝</button>
                         <button onclick='showStatistics("{{ group.group_jid }}")' class="btn-icon stats-btn" title="Statistics">📊</button>
                         <button onclick='editRow("{{ group.group_jid }}")' class="btn-icon edit-btn" title="Edit">✏️</button>
                         <button onclick='deleteRow("{{ group.group_jid }}")' class="btn-icon delete-btn" title="Delete">🗑️</button>
@@ -106,8 +107,7 @@
 <div id="statsModal" class="modal">
     <div class="modal-content stats-modal-content">
         <span class="close" onclick="closeStatsModal()">&times;</span>
-        <h2>Message Statistics</h2>
-        <p id="statsGroupName" style="color: #666; margin-top: -10px;"></p>
+        <h2 id="statsGroupName">Message Statistics</h2>
         
         <div class="time-frame-section">
             <label style="font-weight: 600; margin-bottom: 10px; display: block;">Time Frame</label>
@@ -120,8 +120,8 @@
         </div>
         
         <div class="total-messages-box">
-            <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Total Messages in Selected Time Frame</div>
-            <div id="totalMessages" style="font-size: 32px; font-weight: bold; color: #4169E1;">0</div>
+            <div style="font-size: 12px; color: #666; margin-bottom: 3px;">Total Messages in Selected Time Frame</div>
+            <div id="totalMessages" style="font-size: 24px; font-weight: bold; color: #4169E1;">0</div>
         </div>
         
         <h3 style="margin-top: 30px; margin-bottom: 15px;">Messages Per Day</h3>
@@ -144,6 +144,51 @@
                 </tr>
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Summary Modal -->
+<div id="summaryModal" class="modal">
+    <div class="modal-content summary-modal-content">
+        <span class="close" onclick="closeSummaryModal()">&times;</span>
+        <h2 id="summaryTitle">Group Summary</h2>
+        <p id="summaryGroupName" style="color: #666; margin-top: -10px;"></p>
+        
+        <div class="time-frame-section">
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Time Frame</label>
+            <div class="time-frame-buttons">
+                <button class="time-btn" data-days="1" onclick="selectSummaryTimeFrame(1)">24 Hours</button>
+                <button class="time-btn active" data-days="7" onclick="selectSummaryTimeFrame(7)">7 Days</button>
+                <button class="time-btn" data-days="14" onclick="selectSummaryTimeFrame(14)">14 Days</button>
+                <button class="time-btn" data-days="30" onclick="selectSummaryTimeFrame(30)">30 Days</button>
+            </div>
+        </div>
+        
+        <div class="time-frame-section">
+            <label style="font-weight: 600; margin-bottom: 10px; display: block;">Language</label>
+            <select id="summaryLanguage" class="language-selector" onchange="selectSummaryLanguage()" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <option value="">Auto-detect</option>
+                <option value="English">English</option>
+                <option value="Hebrew">Hebrew</option>
+                <option value="Spanish">Spanish</option>
+                <option value="French">French</option>
+                <option value="German">German</option>
+                <option value="Arabic">Arabic</option>
+                <option value="Russian">Russian</option>
+                <option value="Chinese">Chinese</option>
+            </select>
+        </div>
+        
+        <div id="summaryContent" class="summary-content">
+            <div class="loading-spinner">
+                <div class="spinner"></div>
+                <p>Generating summary...</p>
+            </div>
+        </div>
+        
+        <div id="summaryMeta" class="summary-meta" style="display: none;">
+            <small>Based on <span id="messageCount">0</span> messages</small>
+        </div>
     </div>
 </div>
 
@@ -310,10 +355,10 @@ tr.editing .editable {
 }
 
 .time-frame-section {
-    margin-bottom: 30px;
-    padding: 20px;
+    margin-bottom: 15px;
+    padding: 10px;
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    border-radius: 12px;
+    border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -326,9 +371,9 @@ tr.editing .editable {
 
 .time-btn {
     flex: 1;
-    min-width: 100px;
-    padding: 12px 20px;
-    font-size: 14px;
+    min-width: 80px;
+    padding: 8px 12px;
+    font-size: 13px;
     font-weight: 600;
     color: #4a5568;
     background: white;
@@ -378,6 +423,73 @@ tr.editing .editable {
 
 .time-btn:active {
     transform: translateY(0);
+}
+
+.total-messages-box {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.total-messages-box #totalMessages {
+    color: white !important;
+}
+
+.summary-modal-content {
+    max-width: 800px;
+    width: 90%;
+}
+
+.summary-content {
+    margin: 20px 0;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    min-height: 200px;
+    max-height: 500px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.6;
+}
+
+.loading-spinner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+
+.spinner {
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.summary-meta {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #e0e0e0;
+    color: #666;
+    text-align: center;
+}
+
+.error-message {
+    color: #d33;
+    padding: 20px;
+    text-align: center;
 }
 </style>
 
@@ -481,6 +593,7 @@ function renderTable(groups) {
                 </td>
                 <td>${createdAt}</td>
                 <td class="actions">
+                    <button onclick='showSummary("${group.group_jid}", "${group.group_name || 'Group'}")' class="btn-icon summary-btn" title="View Summary">📝</button>
                     <button onclick='showStatistics("${group.group_jid}")' class="btn-icon stats-btn" title="Statistics">📊</button>
                     <button onclick='editRow("${group.group_jid}")' class="btn-icon edit-btn" title="Edit">✏️</button>
                     <button onclick='deleteRow("${group.group_jid}")' class="btn-icon delete-btn" title="Delete">🗑️</button>
@@ -488,6 +601,92 @@ function renderTable(groups) {
             </tr>
         `;
     }).join('');
+}
+
+function showAddGroupModal() {
+    document.getElementById('addGroupModal').style.display = 'block';
+}
+
+// Summary Modal Functions
+let currentSummaryGroupJid = null;
+let selectedSummaryDays = 7;
+let selectedLanguage = '';
+
+async function showSummary(groupJid, groupName) {
+    currentSummaryGroupJid = groupJid;
+    selectedSummaryDays = 7;
+    selectedLanguage = '';
+    
+    const modal = document.getElementById('summaryModal');
+    document.getElementById('summaryGroupName').textContent = groupName;
+    
+    // Reset time frame buttons
+    document.querySelectorAll('#summaryModal .time-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector('#summaryModal .time-btn[data-days="7"]').classList.add('active');
+    
+    // Reset language selector
+    document.getElementById('summaryLanguage').value = '';
+    
+    modal.style.display = 'block';
+    
+    await fetchSummary(groupJid, 7, '');
+}
+
+function selectSummaryTimeFrame(days) {
+    selectedSummaryDays = days;
+    
+    // Update button states
+    document.querySelectorAll('#summaryModal .time-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`#summaryModal .time-btn[data-days="${days}"]`).classList.add('active');
+    
+    if (currentSummaryGroupJid) {
+        fetchSummary(currentSummaryGroupJid, days, selectedLanguage);
+    }
+}
+
+function selectSummaryLanguage() {
+    selectedLanguage = document.getElementById('summaryLanguage').value;
+    if (currentSummaryGroupJid) {
+        fetchSummary(currentSummaryGroupJid, selectedSummaryDays, selectedLanguage);
+    }
+}
+
+async function fetchSummary(groupJid, days, language) {
+    const summaryContent = document.getElementById('summaryContent');
+    const summaryMeta = document.getElementById('summaryMeta');
+    
+    // Show loading spinner
+    summaryContent.innerHTML = `
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Generating summary...</p>
+        </div>
+    `;
+    summaryMeta.style.display = 'none';
+    
+    try {
+        let url = `/api/groups/${encodeURIComponent(groupJid)}/summary?days=${days}`;
+        if (language) {
+            url += `&language=${encodeURIComponent(language)}`;
+        }
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (response.ok) {
+            summaryContent.innerHTML = data.summary;
+            document.getElementById('messageCount').textContent = data.message_count;
+            summaryMeta.style.display = 'block';
+        } else {
+            summaryContent.innerHTML = `<div class="error-message">${data.error || 'Failed to generate summary'}</div>`;
+        }
+    } catch (error) {
+        summaryContent.innerHTML = `<div class="error-message">Error: ${error.message}</div>`;
+    }
+}
+
+function closeSummaryModal() {
+    document.getElementById('summaryModal').style.display = 'none';
+    currentSummaryGroupJid = null;
 }
 
 function showAddGroupModal() {
@@ -727,11 +926,15 @@ async function deleteRow(groupJid) {
 window.onclick = function(event) {
     const modal = document.getElementById('addGroupModal');
     const statsModal = document.getElementById('statsModal');
+    const summaryModal = document.getElementById('summaryModal');
     if (event.target === modal) {
         closeAddGroupModal();
     }
     if (event.target === statsModal) {
         closeStatsModal();
+    }
+    if (event.target === summaryModal) {
+        closeSummaryModal();
     }
 }
 
@@ -825,7 +1028,8 @@ function updateChart(messagesPerDay) {
                 backgroundColor: 'rgba(102, 126, 234, 0.8)',
                 borderColor: 'rgba(102, 126, 234, 1)',
                 borderWidth: 1,
-                borderRadius: 4
+                borderRadius: 4,
+                barPercentage: 0.25
             }]
         },
         options: {

@@ -81,8 +81,7 @@
 <div id="statsModal" class="modal">
     <div class="modal-content stats-modal-content">
         <span class="close" onclick="closeStatsModal()">&times;</span>
-        <h2>Sender Statistics</h2>
-        <p id="statsSenderName" style="color: #666; margin-top: -10px;"></p>
+        <h2 id="statsSenderName">Sender Statistics</h2>
         
         <div class="time-frame-section">
             <label style="font-weight: 600; margin-bottom: 10px; display: block;">Time Frame</label>
@@ -94,8 +93,8 @@
         </div>
         
         <div class="total-messages-box">
-            <div style="font-size: 14px; color: #666; margin-bottom: 5px;">Total Messages in Selected Time Frame</div>
-            <div id="totalMessages" style="font-size: 32px; font-weight: bold; color: #4169E1;">0</div>
+            <div style="font-size: 12px; color: #666; margin-bottom: 3px;">Total Messages in Selected Time Frame</div>
+            <div id="totalMessages" style="font-size: 24px; font-weight: bold; color: #4169E1;">0</div>
         </div>
         
         <h3 style="margin-top: 30px; margin-bottom: 15px;">Messages Per Group</h3>
@@ -209,10 +208,10 @@
 }
 
 .time-frame-section {
-    margin-bottom: 30px;
-    padding: 20px;
+    margin-bottom: 15px;
+    padding: 10px;
     background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    border-radius: 12px;
+    border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
@@ -225,9 +224,9 @@
 
 .time-btn {
     flex: 1;
-    min-width: 100px;
-    padding: 12px 20px;
-    font-size: 14px;
+    min-width: 80px;
+    padding: 8px 12px;
+    font-size: 13px;
     font-weight: 600;
     color: #4a5568;
     background: white;
@@ -282,10 +281,10 @@
 .total-messages-box {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 20px;
-    border-radius: 12px;
+    padding: 10px;
+    border-radius: 8px;
     text-align: center;
-    margin-bottom: 30px;
+    margin-bottom: 15px;
     box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
 }
 
@@ -458,7 +457,7 @@ async function fetchStatistics(senderJid, days) {
             
             // Update modal title
             document.getElementById('statsSenderName').textContent = 
-                `${data.push_name || senderJid}`;
+                `Statistics: ${data.push_name || senderJid}`;
             
             // Update total messages
             document.getElementById('totalMessages').textContent = data.total_messages;
@@ -503,11 +502,11 @@ function updateChart(messagesPerGroup) {
                 backgroundColor: 'rgba(102, 126, 234, 0.8)',
                 borderColor: 'rgba(102, 126, 234, 1)',
                 borderWidth: 1,
-                borderRadius: 4
+                borderRadius: 4,
+                barPercentage: 0.25
             }]
         },
         options: {
-            indexAxis: 'y',
             responsive: true,
             maintainAspectRatio: false,
             plugins: {

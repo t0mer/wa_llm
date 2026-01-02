@@ -4,18 +4,25 @@ Displays data from Groups, Senders, Reactions, Messages, KBTopics, and KB_Topic_
 """
 
 import os
+import sys
+from pathlib import Path
 from typing import Optional
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, Depends, HTTPException, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from sqlmodel import select, func
+from sqlmodel import select, func, desc
 from sqlmodel.ext.asyncio.session import AsyncSession
 from pydantic import BaseModel
 import secrets
+
+# Add the src directory to the Python path
+src_path = Path(__file__).parent.parent / "src"
+sys.path.insert(0, str(src_path))
 
 from database import get_session, init_db
 from models import Group, Sender, Reaction, Message, KBTopic, KBTopicMessage
@@ -25,6 +32,7 @@ DB_URI = os.getenv("DB_URI")
 BASIC_AUTH_USER = os.getenv("WHATSAPP_BASIC_AUTH_USER", "admin")
 BASIC_AUTH_PASSWORD = os.getenv("WHATSAPP_BASIC_AUTH_PASSWORD", "password")
 WHATSAPP_HOST = os.getenv("WHATSAPP_HOST", "http://localhost:3000")
+MAIN_APP_URL = os.getenv("MAIN_APP_URL", "http://localhost:8000")
 
 if not DB_URI:
     raise ValueError("DB_URI environment variable is required")
@@ -77,6 +85,12 @@ async def root(
     return RedirectResponse(url="/groups")
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Return empty response for favicon to prevent 404 errors"""
+    return Response(status_code=204)
+
+
 # Pydantic models for API requests
 class GroupUpdate(BaseModel):
     group_name: Optional[str] = None
@@ -96,6 +110,41 @@ class GroupCreate(BaseModel):
 
 
 # API endpoints for Groups CRUD
+@app.get("/api/groups")
+async def get_all_groups(
+    page: int = 1,
+    page_size: int = 10,
+    username: str = Depends(verify_credentials),
+    session: AsyncSession = Depends(get_session),
+):
+    """Get all groups with pagination"""
+    offset = (page - 1) * page_size
+    
+    # Get total count
+    count_query = select(func.count()).select_from(Group)
+    total = await session.scalar(count_query)
+    
+    # Get paginated data
+    query = select(Group).offset(offset).limit(page_size).order_by(Group.group_jid)
+    result = await session.exec(query)
+    groups = result.all()
+    
+    return JSONResponse(content={
+        "items": [{
+            "group_jid": g.group_jid,
+            "group_name": g.group_name,
+            "group_topic": g.group_topic,
+            "owner_jid": g.owner_jid,
+            "managed": g.managed,
+            "notify_on_spam": g.notify_on_spam,
+            "created_at": g.created_at.isoformat() if g.created_at else None
+        } for g in groups],
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    })
+
+
 @app.post("/api/groups")
 async def create_group(
     group: GroupCreate,
@@ -165,7 +214,10 @@ async def get_group_statistics(
     ).join(
         Sender, Message.sender_jid == Sender.jid, isouter=True
     ).where(
-        Message.group_jid == group_jid
+        and_(
+            Message.group_jid == group_jid,
+            Message.timestamp >= start_date
+        )
     ).group_by(
         Message.sender_jid, Sender.push_name
     ).order_by(
@@ -188,6 +240,74 @@ async def get_group_statistics(
         "messages_per_day": messages_per_day,
         "top_senders": top_senders
     })
+
+
+@app.get("/api/groups/{group_jid:path}/summary")
+async def get_group_summary(
+    group_jid: str,
+    days: int = 7,
+    language: str = None,
+    username: str = Depends(verify_credentials),
+):
+    """Get AI-generated summary for a group's recent messages by calling the main app API"""
+    from urllib.parse import quote
+    import httpx
+    
+    try:
+        # Call the main application's summary endpoint
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            url = f"{MAIN_APP_URL}/groups/{quote(group_jid, safe='')}/summary"
+            logging.info(f"Calling main app API: {url}")
+            
+            params = {"days": days}
+            if language:
+                params["language"] = language
+            
+            response = await client.get(
+                url,
+                params=params
+            )
+            
+            if response.status_code == 200:
+                return JSONResponse(content=response.json())
+            else:
+                error_detail = response.json().get("detail", "Unknown error")
+                return JSONResponse(
+                    status_code=response.status_code,
+                    content={"error": error_detail}
+                )
+                
+    except httpx.ConnectError as e:
+        logging.error(f"Cannot connect to main app at {MAIN_APP_URL}: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": f"Summary feature requires the main application to be running. "
+                        f"Cannot connect to {MAIN_APP_URL}. "
+                        f"Please ensure the web-server container is running and accessible."
+            }
+        )
+    except (httpx.TimeoutException, httpx.ReadTimeout) as e:
+        logging.error(f"Timeout connecting to main app at {MAIN_APP_URL}: {e}")
+        return JSONResponse(
+            status_code=504,
+            content={
+                "error": f"Summary generation timed out. The main application took too long to respond. "
+                        f"This usually happens when the AI model is still loading or processing."
+            }
+        )
+    except httpx.HTTPError as e:
+        logging.error(f"HTTP error from main app at {MAIN_APP_URL}: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={"error": f"HTTP error communicating with main application: {str(e)}"}
+        )
+    except Exception as e:
+        logging.error(f"Error getting summary from main app: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": f"Failed to generate summary: {str(e)}"}
+        )
 
 
 @app.put("/api/groups/{group_jid:path}")
