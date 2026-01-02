@@ -30,12 +30,12 @@ logger = logging.getLogger(__name__)
     reraise=True,
 )
 async def summarize(
-    session: AsyncSession, settings: Settings, group_name: str, messages: list[Message]
+    session: AsyncSession, settings: Settings, group_name: str, messages: list[Message], language: str = None
 ) -> AgentRunResult[str]:
     agent = Agent(
         model=settings.model_name,
         # TODO: move to jinja?
-        system_prompt=prompt_manager.render("quick_summary.j2", group_name=group_name),
+        system_prompt=prompt_manager.render("quick_summary.j2", group_name=group_name, language=language),
         output_type=str,
     )
 
